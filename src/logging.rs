@@ -5,9 +5,11 @@ use crate::Data;
 
 /// The kind of moderation action being logged.
 pub enum ModAction<'a> {
-    Kick { reason: &'a str },
-    Ban  { reason: &'a str, delete_days: u8 },
+    Kick   { reason: &'a str },
+    Ban    { reason: &'a str, delete_days: u8 },
     Unban,
+    Timeout { reason: &'a str, duration: &'a str },
+    Warn    { reason: &'a str, warn_count: usize, auto_timeout: bool },
 }
 
 /// Post a mod action embed to the mod log channel.
@@ -36,6 +38,21 @@ pub async fn log_mod_action(
             "✅ Member Unbanned",
             serenity::Colour::DARK_GREEN,
             String::new(),
+        ),
+        ModAction::Timeout { reason, duration } => (
+            "⏱️ Member Timed Out",
+            serenity::Colour::GOLD,
+            format!("**Duration:** {}\n**Reason:** {}", duration, reason),
+        ),
+        ModAction::Warn { reason, warn_count, auto_timeout } => (
+            "⚠️ Member Warned",
+            serenity::Colour::ORANGE,
+            format!(
+                "**Reason:** {}\n**Total warnings:** {}\n{}",
+                reason,
+                warn_count,
+                if auto_timeout { "⏱️ Auto-timeout applied." } else { "" },
+            ),
         ),
     };
 

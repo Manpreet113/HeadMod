@@ -2,7 +2,6 @@ mod commands;
 mod logging;
 mod types;
 
-use std::sync::Arc;
 use poise::serenity_prelude as serenity;
 use types::*;
 use logging::{LogHandler, DataKey};
@@ -75,9 +74,13 @@ async fn main() {
         .options(poise::FrameworkOptions {
             commands: vec![
                 commands::general::ping(),
+                commands::general::help(),
                 commands::moderation::kick(),
                 commands::moderation::ban(),
                 commands::moderation::unban(),
+                commands::moderation2::timeout(),
+                commands::moderation2::warn(),
+                commands::moderation2::purge(),
             ],
             on_error: |err| Box::pin(on_error(err)),
             ..Default::default()
@@ -90,15 +93,11 @@ async fn main() {
                     guild_id,
                 ).await?;
 
-                let data = Data {
-                    guild_id,
-                    mod_log_channel,
-                    message_log_channel: msg_log_channel,
-                };
+                let data = Data::new(guild_id, mod_log_channel, msg_log_channel);
 
                 // Share a clone into serenity's TypeMap so LogHandler can
                 // reach it. Poise gets its own copy via Ok(data) below.
-                ctx.data.write().await.insert::<DataKey>(Arc::new(data.clone()));
+                ctx.data.write().await.insert::<DataKey>(std::sync::Arc::new(data.clone()));
 
                 tracing::info!("Head Mod is online!");
                 Ok(data)
@@ -112,6 +111,9 @@ async fn main() {
         .await
         .expect("Failed to build Discord client");
 
+    // Enable message caching so edit/delete logs can recover message content.
+    // Must be called after the client is built, not during construction.
     client.cache.set_max_messages(1000);
+
     client.start().await.expect("Client encountered a fatal error");
 }
