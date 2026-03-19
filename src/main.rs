@@ -23,6 +23,7 @@ async fn main() {
             commands: vec![
                 commands::general::ping(),
                 commands::moderation::kick(),
+                commands::moderation::ban(),
             ],
             ..Default::default()
         })
