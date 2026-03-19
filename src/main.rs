@@ -1,10 +1,11 @@
 mod commands;
+mod events;
 mod logging;
 mod types;
 
 use poise::serenity_prelude as serenity;
 use types::*;
-use logging::{LogHandler, DataKey};
+use events::{MessageLogHandler, DataKey};
 
 /// Central error handler — called by Poise whenever a command returns Err
 /// or a pre-/post-command hook fails.
@@ -78,9 +79,9 @@ async fn main() {
                 commands::moderation::kick(),
                 commands::moderation::ban(),
                 commands::moderation::unban(),
-                commands::moderation2::timeout(),
-                commands::moderation2::warn(),
-                commands::moderation2::purge(),
+                commands::moderation::timeout(),
+                commands::moderation::warn(),
+                commands::moderation::purge(),
             ],
             on_error: |err| Box::pin(on_error(err)),
             ..Default::default()
@@ -107,7 +108,7 @@ async fn main() {
 
     let mut client = serenity::ClientBuilder::new(token, intents)
         .framework(framework)
-        .event_handler(LogHandler)
+        .event_handler(MessageLogHandler)
         .await
         .expect("Failed to build Discord client");
 
