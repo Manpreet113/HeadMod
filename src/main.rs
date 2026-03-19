@@ -24,6 +24,7 @@ async fn main() {
                 commands::general::ping(),
                 commands::moderation::kick(),
                 commands::moderation::ban(),
+                commands::moderation::unban(),
             ],
             ..Default::default()
         })

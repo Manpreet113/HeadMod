@@ -64,7 +64,7 @@ pub async fn kick(
 )]
 pub async fn ban(
     ctx: Context<'_>,
-    #[description = "The user to ban"] member: serenity::Member,
+    #[description = "The user to be banned"] member: serenity::Member,
     #[description = "Reason for the ban (optional but recommended unless you enjoy chaos)"] reason: Option<String>,
     #[description = "Days of messages to delete (0–7)"] delete: Option<u8>,
 ) -> Result<(), Error> {
@@ -103,6 +103,48 @@ pub async fn ban(
             ctx.say(format!(
                 "❌ Couldn't ban **{}**: {}",
                 member.user.name, e
+            ))
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Unban a user, optionally specifying a reason.
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions="BAN_MEMBERS",
+    required_bot_permissions = "BAN_MEMBERS"
+)]
+pub async fn unban(
+    ctx: Context<'_>,
+    #[description = "The user to be unbanned"] user_id: serenity::UserId,
+) -> Result<(), Error> {
+    ctx.defer().await?;
+
+    let guild_id = ctx.guild_id().unwrap();
+    let bans = guild_id.bans(&ctx.http(), None, None).await?;
+
+    if !bans.iter().any(|b| b.user.id == user_id) {
+        ctx.say(format!("❌ <@{}> is not even banned... yet.", user_id)).await?;
+        return Ok(());
+    }
+
+    // Attempt the Unban
+    match guild_id.unban(&ctx.http(), user_id).await {
+        Ok(()) => {
+            ctx.say(format!(
+                "User **<@{}>** has been unbanned.",
+                user_id,
+            ))
+                .await?;
+        }
+        Err(e) => {
+            ctx.say(format!(
+                "❌ Couldn't unban **<@{}>**: {}",
+                user_id, e
             ))
                 .await?;
         }
