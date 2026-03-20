@@ -6,7 +6,8 @@ use super::actions::{execute_kick, hierarchy_check, ActionResult, KickParams};
 #[poise::command(
     slash_command, guild_only,
     default_member_permissions = "KICK_MEMBERS",
-    required_bot_permissions   = "KICK_MEMBERS"
+    required_bot_permissions   = "KICK_MEMBERS",
+    description_localized("en-US", "Kick a member from the server.")
 )]
 pub async fn kick(
     ctx: Context<'_>,
@@ -48,9 +49,9 @@ pub async fn kick(
     }).await;
 
     match result {
-        ActionResult::Ok { message, .. }     => { ctx.say(message).await?; }
-        ActionResult::DiscordError(e)        => { ctx.say(format!("❌ Couldn't kick **{}**: {}", member.user.name, e)).await?; }
-        ActionResult::InvalidInput(msg)      => { ctx.say(format!("❌ {}", msg)).await?; }
+        ActionResult::Ok(embed)         => { ctx.send(poise::CreateReply::default().embed(embed)).await?; }
+        ActionResult::DiscordError(e)   => { ctx.say(format!("❌ Couldn't kick **{}**: {}", member.user.name, e)).await?; }
+        ActionResult::InvalidInput(msg) => { ctx.say(format!("❌ {}", msg)).await?; }
     }
 
     Ok(())

@@ -1,12 +1,13 @@
 use crate::{Context, Error};
 
-/// A quick way to check the bot is alive.
+/// A quick way to check if the bot is online and responding.
 #[poise::command(slash_command)]
 pub async fn ping(ctx: Context<'_>) -> Result<(), Error> {
     ctx.say("I'm up alright!").await?;
     Ok(())
 }
 
+/// Display help information and usage for all available commands.
 #[poise::command(slash_command)]
 pub async fn help(
     ctx: Context<'_>,

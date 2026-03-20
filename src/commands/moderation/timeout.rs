@@ -6,7 +6,8 @@ use super::actions::{execute_timeout, ActionResult, TimeoutParams};
 #[poise::command(
     slash_command, guild_only,
     default_member_permissions = "MODERATE_MEMBERS",
-    required_bot_permissions   = "MODERATE_MEMBERS"
+    required_bot_permissions   = "MODERATE_MEMBERS",
+    description_localized("en-US", "Temporarily mute a member (Timeouts). Max 28 days.")
 )]
 pub async fn timeout(
     ctx: Context<'_>,
@@ -33,9 +34,9 @@ pub async fn timeout(
     }).await?;
 
     match result {
-        ActionResult::Ok { message, .. }    => { ctx.say(message).await?; }
-        ActionResult::DiscordError(e)       => { ctx.say(format!("❌ Couldn't timeout **{}**: {}", member.user.name, e)).await?; }
-        ActionResult::InvalidInput(msg)     => { ctx.say(format!("❌ {}", msg)).await?; }
+        ActionResult::Ok(embed)         => { ctx.send(poise::CreateReply::default().embed(embed)).await?; }
+        ActionResult::DiscordError(e)   => { ctx.say(format!("❌ Couldn't timeout **{}**: {}", member.user.name, e)).await?; }
+        ActionResult::InvalidInput(msg) => { ctx.say(format!("❌ {}", msg)).await?; }
     }
 
     Ok(())

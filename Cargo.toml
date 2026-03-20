@@ -11,3 +11,5 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 chrono = "0.4.44"
 dashmap = "6.1.0"
+sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio-rustls", "macros", "chrono"] }
+serde = { version = "1.0.149", features = ["derive"] }

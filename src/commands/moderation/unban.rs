@@ -1,12 +1,13 @@
 use poise::serenity_prelude as serenity;
 use crate::{Context, Error};
-use crate::logging::{log_mod_action, ModAction};
+use crate::commands::moderation::actions::{ActionResult, execute_unban, UnbanParams};
 
 /// Unban a previously banned user.
 #[poise::command(
     slash_command, guild_only,
     default_member_permissions = "BAN_MEMBERS",
-    required_bot_permissions   = "BAN_MEMBERS"
+    required_bot_permissions   = "BAN_MEMBERS",
+    description_localized("en-US", "Unban a previously banned user by their ID.")
 )]
 pub async fn unban(
     ctx: Context<'_>,
@@ -15,24 +16,20 @@ pub async fn unban(
     ctx.defer().await?;
 
     let guild_id = ctx.guild_id().ok_or("Could not get guild ID")?;
-    let bans     = guild_id.bans(&ctx.http(), None, None).await?;
 
-    if !bans.iter().any(|b| b.user.id == user_id) {
-        ctx.say(format!("❌ <@{}> is not currently banned.", user_id)).await?;
-        return Ok(());
-    }
+    let params = UnbanParams {
+        http: &ctx.http(),
+        data: ctx.data(),
+        invoker: ctx.author(),
+        guild_id,
+        user_id,
+        reason: "Unbanned by moderator",
+    };
 
-    let target = user_id.to_user(&ctx.http()).await?;
-
-    match guild_id.unban(&ctx.http(), user_id).await {
-        Ok(()) => {
-            log_mod_action(&ctx.http(), ctx.data(), ctx.author(), &target,
-                ModAction::Unban).await;
-            ctx.say(format!("✅ <@{}> has been unbanned.", user_id)).await?;
-        }
-        Err(e) => {
-            ctx.say(format!("❌ Couldn't unban <@{}>: {}", user_id, e)).await?;
-        }
+    match execute_unban(params).await {
+        ActionResult::Ok(embed)         => { ctx.send(poise::CreateReply::default().embed(embed)).await?; }
+        ActionResult::DiscordError(e)   => { ctx.say(format!("❌ Couldn't unban <@{}>: {}", user_id, e)).await?; }
+        ActionResult::InvalidInput(msg) => { ctx.say(format!("❌ {}", msg)).await?; }
     }
 
     Ok(())

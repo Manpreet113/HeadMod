@@ -1,14 +1,13 @@
 mod commands;
 mod events;
+mod background_jobs;
 mod logging;
 mod types;
 
 use poise::serenity_prelude as serenity;
 use types::*;
-use events::{MessageLogHandler, DataKey};
+use events::DataKey;
 
-/// Central error handler — called by Poise whenever a command returns Err
-/// or a pre-/post-command hook fails.
 async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     match error {
         poise::FrameworkError::Command { error, ctx, .. } => {
@@ -35,86 +34,86 @@ async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     }
 }
 
-/// Parse a required `u64` env var, panicking with a clear message on failure.
-fn parse_id(var: &str) -> u64 {
-    std::env::var(var)
-        .unwrap_or_else(|_| panic!("Missing {} in environment / .env file", var))
-        .parse()
-        .unwrap_or_else(|_| panic!("{} must be a valid integer", var))
-}
-
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();
-
-    // Initialise tracing. RUST_LOG controls the filter at runtime,
-    // e.g. `RUST_LOG=head_mod=debug,warn cargo run`.
-    // Falls back to INFO for everything if RUST_LOG is not set.
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")))
         .init();
 
-    let token           = std::env::var("DISCORD_TOKEN")
-        .expect("Missing DISCORD_TOKEN in environment / .env file");
-    let guild_id        = serenity::GuildId::new(parse_id("GUILD_ID"));
-    let mod_log_channel = serenity::ChannelId::new(parse_id("MOD_LOG_CHANNEL_ID"));
-    let msg_log_channel = serenity::ChannelId::new(parse_id("MESSAGE_LOG_CHANNEL_ID"));
+    let token = std::env::var("DISCORD_TOKEN").expect("Missing DISCORD_TOKEN");
+    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://data.db".to_string());
+    let db = sqlx::SqlitePool::connect(&db_url).await.expect("Failed to connect to SQLite");
+    
+    let guild_id_opt = std::env::var("GUILD_ID").ok().and_then(|id| id.parse::<u64>().ok()).map(serenity::GuildId::new);
 
-    // MESSAGE_CONTENT lets us read message text for the edit/delete logs.
-    // Make sure this privileged intent is enabled in the Developer Portal.
     let intents = serenity::GatewayIntents::non_privileged()
         | serenity::GatewayIntents::MESSAGE_CONTENT
-        | serenity::GatewayIntents::GUILD_MESSAGES;
+        | serenity::GatewayIntents::GUILD_MESSAGES
+        | serenity::GatewayIntents::GUILD_MEMBERS;
 
-    tracing::info!("Connecting to Discord...");
-
+    let db_for_setup = db.clone();
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
                 commands::general::ping(),
                 commands::general::help(),
-                commands::moderation::kick(),
-                commands::moderation::ban(),
-                commands::moderation::unban(),
-                commands::moderation::timeout(),
-                commands::moderation::warn(),
-                commands::moderation::purge(),
+                commands::moderation::kick::kick(),
+                commands::moderation::ban::ban(),
+                commands::moderation::unban::unban(),
+                commands::moderation::timeout::timeout(),
+                commands::moderation::tempban::tempban(),
+                commands::moderation::warn::warn(),
+                commands::moderation::purge::purge(),
+                commands::moderation::logs::logs(),
+                commands::moderation::case::case(),
+                commands::moderation::stats::stats(),
+                commands::moderation::mod_center::center(),
+                commands::moderation::history::history(),
+                commands::moderation::report::report_message(),
+                commands::moderation::role::role(),
+                commands::moderation::whois::whois(),
+                commands::moderation::lockdown::lockdown(),
+                commands::moderation::lockdown::unlock(),
+                commands::moderation::emergency::emergency(),
+                commands::moderation::utility::slowmode(),
+                commands::moderation::filters::channel_filter(),
+                commands::announcements::announce(),
+                commands::tickets::ticket(),
+                commands::config::setup(),
+                commands::embeds::embed(),
             ],
             on_error: |err| Box::pin(on_error(err)),
             ..Default::default()
         })
         .setup(move |ctx, _ready, framework| {
             Box::pin(async move {
-                poise::builtins::register_in_guild(
-                    ctx,
-                    &framework.options().commands,
-                    guild_id,
-                ).await?;
-
-                let data = Data::new(guild_id, mod_log_channel, msg_log_channel);
-
-                // Share a clone into serenity's TypeMap so LogHandler can
-                // reach it. Poise gets its own copy via Ok(data) below.
+                if let Some(guild_id) = guild_id_opt {
+                    poise::builtins::register_in_guild(ctx, &framework.options().commands, guild_id).await?;
+                } else {
+                    poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+                }
+                let data = Data::new(db_for_setup);
                 ctx.data.write().await.insert::<DataKey>(std::sync::Arc::new(data.clone()));
-
-                tracing::info!("Head Mod is online!");
                 Ok(data)
             })
         })
         .build();
 
-    let mut client = serenity::ClientBuilder::new(token, intents)
+    let client = serenity::ClientBuilder::new(token, intents)
         .framework(framework)
-        .event_handler(MessageLogHandler)
+        .event_handler(events::MessageLogHandler)
+        .event_handler(events::AutomodHandler)
+        .event_handler(events::InteractionHandler)
+        .event_handler(events::PersistenceHandler)
+        .event_handler(events::MemberHandler)
         .await
         .expect("Failed to build Discord client");
 
-    // Enable message caching so edit/delete logs can recover message content.
-    // Must be called after the client is built, not during construction.
+    let mut client = client;
     client.cache.set_max_messages(1000);
-
+    let data_arc = std::sync::Arc::new(Data::new(db.clone()));
+    let http_arc = client.http.clone();
+    tokio::spawn(crate::background_jobs::start_background_jobs(data_arc, http_arc));
     client.start().await.expect("Client encountered a fatal error");
 }
