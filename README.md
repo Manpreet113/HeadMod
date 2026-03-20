@@ -1,4 +1,4 @@
-# 🛡️ Head Mod
+# <img src="temp.png" width="40" height="40" align="center" alt="logo" /> Head Mod
 
 > *A Discord moderation bot built with Rust, Poise, and an increasingly concerning amount of ambition.*
 
